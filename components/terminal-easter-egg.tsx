@@ -137,7 +137,14 @@ export function TerminalEasterEgg({ onCommand }: TerminalEasterEggProps) {
             )}
           </form>
         ) : (
-          <span className="inline-block w-[2px] h-[1.2em] bg-foreground ml-[1px] animate-[blink_1s_step-end_infinite]" />
+          <button
+            type="button"
+            onClick={() => setIsActive(true)}
+            className="inline-flex items-center justify-center w-6 h-[1.2em] -ml-2 cursor-pointer"
+            aria-label="Activate terminal"
+          >
+            <span className="inline-block w-[2px] h-full bg-foreground animate-[blink_1s_step-end_infinite]" />
+          </button>
         )}
       </h1>
 
