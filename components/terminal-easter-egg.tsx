@@ -112,7 +112,6 @@ export function TerminalEasterEgg({ onCommand }: TerminalEasterEggProps) {
         <span>scooby</span>
         {isActive ? (
           <form onSubmit={handleSubmit} className="inline-flex items-center">
-            <span className="text-muted-foreground">/</span>
             <span className="relative inline-flex items-center">
               <span className="invisible whitespace-pre">{input || ' '}</span>
               <input
