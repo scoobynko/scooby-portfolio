@@ -38,7 +38,15 @@ export default function Home() {
                     <span className="text-foreground/70">&gt;</span> whoami
                   </p>
                   <p className="text-foreground leading-relaxed">
-                    Product Designer at an AI startup. I bridge design and development, ship code when I can, and build AI workflows that make designers more valuable, not obsolete.
+                    Product Designer at{" "}
+                    <Link
+                      href="https://duvo.ai"
+                      target="_blank"
+                      className="text-foreground hover:underline"
+                    >
+                      duvo.ai
+                    </Link>
+                    . I bridge design and development, ship code when I can, and build AI workflows that make designers more valuable, not obsolete.
                   </p>
                 </div>
 
