@@ -112,6 +112,7 @@ export function TerminalEasterEgg({ onCommand }: TerminalEasterEggProps) {
         <span>scooby</span>
         {isActive ? (
           <form onSubmit={handleSubmit} className="inline-flex items-center">
+            <span className="text-muted-foreground">/</span>
             <span className="relative inline-flex items-center">
               <span className="invisible whitespace-pre">{input || ' '}</span>
               <input
@@ -136,14 +137,7 @@ export function TerminalEasterEgg({ onCommand }: TerminalEasterEggProps) {
             )}
           </form>
         ) : (
-          <button
-            type="button"
-            onClick={() => setIsActive(true)}
-            className="inline-flex items-center justify-center w-6 h-[1.2em] -ml-2 cursor-pointer"
-            aria-label="Activate terminal"
-          >
-            <span className="inline-block w-[2px] h-full bg-foreground animate-[blink_1s_step-end_infinite]" />
-          </button>
+          <span className="inline-block w-[2px] h-[1.2em] bg-foreground ml-[1px] animate-[blink_1s_step-end_infinite]" />
         )}
       </h1>
 
