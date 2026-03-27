@@ -6,13 +6,12 @@ const FONT_SIZE = '14px'
 const CHAR_DELAY = 30
 const FACE_CHAR_DELAY = 40
 
-const WORLD_WIDTH = 4000
+const WORLD_WIDTH = 4800
 const MOVE_SPEED = 1
-const SCROLL_MOVE_AMOUNT = 2
 const GROUND_Y_RATIO = 0.65
 const CHARACTER_X_RATIO = 0.25
 const COLLECTION_TOLERANCE = 60
-const WALL_X = 3400
+const WALL_X = 4200
 
 // 5-row pixel font for splash screen (each number's bits = pixels, MSB = left)
 const SPLASH_FONT: Record<string, { w: number; rows: number[] }> = {
@@ -63,17 +62,21 @@ const FIG_FILE_DEFS = [
   { worldX: 600,  label: 'COMPONENT_V3_FINAL.fig' },
   { worldX: 1100, label: 'HANDOFF_READY_v2.fig' },
   { worldX: 1700, label: 'APPROVED_DO_NOT_TOUCH.fig' },
-  { worldX: 2300, label: 'WAITING_FOR_DEV.fig' },
-  { worldX: 2900, label: 'FEEDBACK_PENDING.fig' },
+  { worldX: 2900, label: 'WAITING_FOR_DEV.fig' },
+  { worldX: 3500, label: 'FEEDBACK_PENDING.fig' },
 ]
 
-const NARRATIVE: Record<number, string[]> = {
-  0: ['> Use arrow keys or scroll to move.', '> Collect the files.'],
-  1: ['> Another version nobody will ship.'],
-  2: ['> waiting for dev... waiting for someone to care.'],
-  3: ['> I\'ve spent years watching great work die in Figma.'],
-  4: ['> Your designs have no value here.', '> No one can access unrealized potential.'],
-  5: ['> What if someone finally pushed it?'],
+function getNarrative(mobile: boolean): Record<number, string[]> {
+  return {
+    0: mobile
+      ? ['> Use the button below to move.', '> Collect the files.']
+      : ['> Use arrow keys to move.', '> Collect the files.'],
+    1: ['> Another version nobody will ship.'],
+    2: ['> waiting for dev... waiting for someone to care.'],
+    3: ['> I\'ve spent years in Design Operations.', '> Building teams. Building processes.', '> Endless handoffs. Endless back-and-forth.', '> Watching great work die before it ships.'],
+    4: ['> Your designs have no value here.', '> No one can access unrealized potential.'],
+    5: ['> What if you finally pushed it?'],
+  }
 }
 
 interface FigFile { worldX: number; label: string; collected: boolean }
@@ -158,6 +161,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
   // --- DOM Construction ---
   const isMobile = window.innerWidth < 768
+  const NARRATIVE = getNarrative(isMobile)
 
   const wrapper = document.createElement('div')
   Object.assign(wrapper.style, {
@@ -226,14 +230,15 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     flexShrink: '0',
   })
 
-  // Right pane: text
+  // Right pane (desktop) / bottom pane (mobile): text
   const textPane = document.createElement('div')
   Object.assign(textPane.style, {
-    flex: isMobile ? '0' : '2',
+    flex: isMobile ? '0 0 auto' : '2',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
     position: 'relative',
+    ...(isMobile ? { maxHeight: '120px', minHeight: '80px' } : {}),
   })
 
   const figCounter = document.createElement('span')
@@ -275,24 +280,54 @@ export function createTerminalExperience(container: HTMLElement): () => void {
   contentArea.appendChild(figCounter)
 
   splitContainer.appendChild(contentArea)
-  if (!isMobile) splitContainer.appendChild(divider)
-  if (!isMobile) splitContainer.appendChild(textPane)
+  if (!isMobile) {
+    splitContainer.appendChild(divider)
+    splitContainer.appendChild(textPane)
+  }
+
+  // Mobile move button (right arrow, full width bar at the bottom)
+  let mobileMoveButton: HTMLElement | null = null
+  if (isMobile) {
+    mobileMoveButton = document.createElement('div')
+    Object.assign(mobileMoveButton.style, {
+      flexShrink: '0',
+      display: 'none',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '52px',
+      borderTop: '1px solid #444',
+      background: '#111',
+      color: TEXT_COLOR,
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: '22px',
+      userSelect: 'none',
+      cursor: 'pointer',
+      WebkitTapHighlightColor: 'transparent',
+    })
+    mobileMoveButton.textContent = '\u2192'
+  }
 
   terminalWindow.appendChild(titleBar)
   terminalWindow.appendChild(splitContainer)
+  if (isMobile && mobileMoveButton) terminalWindow.appendChild(mobileMoveButton)
   wrapper.appendChild(terminalWindow)
   container.appendChild(wrapper)
 
   // --- Utility functions ---
+
+  let typewriterGeneration = 0
 
   function typewriteLines(
     target: HTMLElement, lines: string[], charDelay: number, lineDelay: number,
     onLineComplete?: (lineIndex: number) => void, onAllComplete?: () => void,
     textColor?: string, boldText?: boolean,
   ): void {
+    typewriterGeneration++
+    const myGeneration = typewriterGeneration
     hideIdleCursor()
     let lineIndex = 0
     function typeLine(): void {
+      if (myGeneration !== typewriterGeneration) return
       if (lineIndex >= lines.length) { showIdleCursor(); onAllComplete?.(); return }
       const line = lines[lineIndex]
       const div = document.createElement('div')
@@ -309,6 +344,11 @@ export function createTerminalExperience(container: HTMLElement): () => void {
         return
       }
       const intervalId = safeInterval(() => {
+        if (myGeneration !== typewriterGeneration) {
+          clearInterval(intervalId)
+          intervalIds.delete(intervalId)
+          return
+        }
         if (charIndex < line.length) {
           div.textContent = line.substring(0, charIndex + 1)
           charIndex++
@@ -588,25 +628,6 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     }) as EventListener)
   }
 
-  function setupScrollControls(
-    st: GameState,
-    addEvt: (target: EventTarget, event: string, handler: EventListener, options?: AddEventListenerOptions | boolean) => void,
-  ): void {
-    addEvt(document, 'wheel', ((e: WheelEvent) => {
-      e.preventDefault()
-      if (st.catharsisRunning || st.hitWall) return
-      if (e.deltaY > 0) {
-        st.cameraX += SCROLL_MOVE_AMOUNT
-        st.hopPhase += 0.3
-        st.hopOffset = Math.sin(st.hopPhase) * 3
-      } else if (e.deltaY < 0) {
-        st.cameraX -= SCROLL_MOVE_AMOUNT
-        st.hopPhase += 0.3
-        st.hopOffset = Math.sin(st.hopPhase) * 3
-      }
-    }) as EventListener, { passive: false })
-  }
-
   function setupTouchControls(
     st: GameState,
     wrapperEl: HTMLElement,
@@ -701,8 +722,6 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     ctx: CanvasRenderingContext2D,
     drops: RainDrop[],
     intensity: number,
-    canvasWidth: number,
-    canvasHeight: number,
   ): void {
     const activeCount = Math.floor(intensity * drops.length)
     ctx.font = '14px monospace'
@@ -1274,7 +1293,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
           '> But shipping them?',
           '> That part\'s on you.',
           '>',
-          '> Wanna talk about it? [\u21B5]',
+          isMobile ? '> Wanna talk about it? [tap]' : '> Wanna talk about it? [\u21B5]',
         ], CHAR_DELAY, 400, undefined, () => {
           state.ctaReady = true
         }, ACCENT)
@@ -1305,7 +1324,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     const narrative = NARRATIVE[totalCollected]
     if (narrative && textCurrent) {
       archiveCurrentText()
-      typewriteLines(textCurrent, narrative, CHAR_DELAY, 400)
+      typewriteLines(textCurrent, narrative, CHAR_DELAY, 600)
     }
 
     // Face transition
@@ -1383,12 +1402,12 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
     renderStars(gameCtx, state.cameraX, groundY, width)
     renderGround(gameCtx, state.cameraX, groundY, width)
-    renderUnderground(gameCtx, state.cameraX, groundY, width, height)
+    if (!isMobile) renderUnderground(gameCtx, state.cameraX, groundY, width, height)
     renderFiles(gameCtx, state.figFiles, state.cameraX, groundY, width)
     renderWall(gameCtx, WALL_X, state.cameraX, groundY, height, state.wallShattered)
     renderCharacter(gameCtx, charScreenX, groundY, state.currentFace, state.hopOffset, state.bounceOffset)
     renderShatterParticles(gameCtx, state.shatterParticles)
-    renderRain(gameCtx, state.rainDrops, state.currentRainIntensity, width, height)
+    renderRain(gameCtx, state.rainDrops, state.currentRainIntensity)
     renderLightningBolts(gameCtx, state.lightningBolts)
     renderFireworks(gameCtx, state.fireworks)
 
@@ -1422,16 +1441,17 @@ export function createTerminalExperience(container: HTMLElement): () => void {
         bottom: '0',
         left: '0',
         right: '0',
-        padding: '16px 24px',
-        maxHeight: '120px',
-        overflow: 'hidden',
-        zIndex: '2',
-        background: 'linear-gradient(transparent, rgba(10,10,10,0.9) 20%)',
+        height: '35%',
+        padding: '10px 16px',
+        overflowY: 'auto',
+        scrollbarWidth: 'none',
         lineHeight: '1.7',
-        pointerEvents: 'none',
+        zIndex: '2',
+        background: 'linear-gradient(transparent, rgba(10,10,10,0.95) 15%)',
       })
       textZone.appendChild(idleCursor)
       textZone.appendChild(textCurrent)
+      textZone.appendChild(textHistory)
       contentArea.appendChild(textZone)
     } else {
       Object.assign(textZone.style, {
@@ -1456,11 +1476,25 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
     // Wire controls
     setupKeyboardControls(state, triggerCTA, addEventListener)
-    setupScrollControls(state, addEventListener)
     setupTouchControls(state, wrapper, triggerCTA, addEventListener)
 
+    // Mobile move button: hold to move right
+    if (isMobile && mobileMoveButton) {
+      mobileMoveButton.style.display = 'flex'
+      addEventListener(mobileMoveButton, 'touchstart', ((e: TouchEvent) => {
+        e.preventDefault()
+        state.movingRight = true
+      }) as EventListener, { passive: false })
+      addEventListener(mobileMoveButton, 'touchend', (() => {
+        state.movingRight = false
+      }) as EventListener)
+      addEventListener(mobileMoveButton, 'touchcancel', (() => {
+        state.movingRight = false
+      }) as EventListener)
+    }
+
     // Show initial text
-    typewriteLines(textCurrent!, NARRATIVE[0]!, CHAR_DELAY, 400)
+    typewriteLines(textCurrent!, NARRATIVE[0]!, CHAR_DELAY, 600)
 
     // Show fig counter
     figCounter.style.opacity = '1'
@@ -1564,14 +1598,8 @@ export function createTerminalExperience(container: HTMLElement): () => void {
         // Pad and shift
         const padded = '  ' + line + '  '
         const start = Math.max(0, 2 - shift)
-        let shifted = padded.substring(start, start + line.length)
-        // Corrupt a few random chars
-        const chars = shifted.split('')
-        for (let j = 0; j < chars.length; j++) {
-          const seed = (i * 131 + j * 37) % 100
-          // no pixel corruption — keep it clean
-        }
-        return chars.join('')
+        const shifted = padded.substring(start, start + line.length)
+        return shifted
       })
     }
 
@@ -1628,7 +1656,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
       letterSpacing: '3px',
       textTransform: 'uppercase',
     })
-    prompt.textContent = '[ press enter to start ]'
+    prompt.textContent = isMobile ? '[ tap to start ]' : '[ press enter to start ]'
 
     // Blink the prompt
     const blinkId = safeInterval(() => {
