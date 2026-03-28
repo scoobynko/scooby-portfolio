@@ -430,15 +430,13 @@ export function createTerminalExperience(container: HTMLElement): () => void {
   }
 
   function scheduleAmbientLightning(canvasWidth: number, groundY: number): void {
-    const flashes = 4 + Math.floor(Math.random() * 3)
-    for (let i = 0; i < flashes; i++) {
-      const delay = 2000 + i * 3000 + Math.random() * 2000
-      safeTimeout(() => {
-        if (!state.catharsisRunning && !state.hitWall && state.gameRunning) {
-          state.lightningBolts.push(spawnLightningBolt(canvasWidth, groundY))
-        }
-      }, delay)
+    function nextBolt(): void {
+      if (state.hitWall || state.catharsisRunning || !state.gameRunning) return
+      state.lightningBolts.push(spawnLightningBolt(canvasWidth, groundY))
+      const delay = 2000 + Math.random() * 4000
+      safeTimeout(nextBolt, delay)
     }
+    safeTimeout(nextBolt, 1000 + Math.random() * 2000)
   }
 
   // --- Fireworks ---
@@ -1233,7 +1231,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
         archiveCurrentText()
         const div = document.createElement('div')
         hideIdleCursor()
-        div.textContent = '> PUSH TO PRODUCTION.'
+        div.textContent = '> PUSHED TO PRODUCTION.'
         div.style.fontWeight = 'bold'
         textCurrent.appendChild(div)
         showIdleCursor()
@@ -1347,8 +1345,9 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
     // Input processing
     if (!state.catharsisRunning) {
-      if (state.movingRight && !state.hitWall) state.cameraX += MOVE_SPEED
-      if (state.movingLeft && state.cameraX > 0) state.cameraX -= MOVE_SPEED
+      const speed = isMobile ? MOVE_SPEED * 1.3 : MOVE_SPEED * 1.2
+      if (state.movingRight && !state.hitWall) state.cameraX += speed
+      if (state.movingLeft && state.cameraX > 0) state.cameraX -= speed
       state.cameraX = Math.max(0, Math.min(state.cameraX, WORLD_WIDTH - width))
     }
 
@@ -1476,13 +1475,16 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
     // Wire controls
     setupKeyboardControls(state, triggerCTA, addEventListener)
-    setupTouchControls(state, wrapper, triggerCTA, addEventListener)
+    if (!isMobile) {
+      setupTouchControls(state, wrapper, triggerCTA, addEventListener)
+    }
 
     // Mobile move button: hold to move right
     if (isMobile && mobileMoveButton) {
       mobileMoveButton.style.display = 'flex'
       addEventListener(mobileMoveButton, 'touchstart', ((e: TouchEvent) => {
         e.preventDefault()
+        e.stopPropagation()
         state.movingRight = true
       }) as EventListener, { passive: false })
       addEventListener(mobileMoveButton, 'touchend', (() => {
