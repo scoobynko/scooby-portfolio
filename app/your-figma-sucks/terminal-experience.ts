@@ -7,7 +7,7 @@ const CHAR_DELAY = 30
 const FACE_CHAR_DELAY = 40
 
 const WORLD_WIDTH = 4800
-const MOVE_SPEED = 1
+const MOVE_SPEED = 1.8
 const GROUND_Y_RATIO = 0.65
 const CHARACTER_X_RATIO = 0.25
 const COLLECTION_TOLERANCE = 60
@@ -1335,8 +1335,18 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
   // --- Game loop ---
 
-  function gameLoop(): void {
+  const TARGET_FPS = 60
+  const TARGET_FRAME_MS = 1000 / TARGET_FPS
+  let lastFrameTime = 0
+
+  function gameLoop(time: number): void {
     if (!state.gameRunning || !gameCtx || !gameCanvas) return
+
+    // Delta-time: normalize speed to 60fps regardless of actual framerate
+    if (lastFrameTime === 0) lastFrameTime = time
+    const deltaMs = Math.min(time - lastFrameTime, 50) // cap at 50ms to avoid jumps
+    lastFrameTime = time
+    const dt = deltaMs / TARGET_FRAME_MS // 1.0 at 60fps, 0.5 at 120fps, 2.0 at 30fps
 
     const dims = getCanvasDimensions(gameCanvas)
     const { width, height } = dims
@@ -1345,7 +1355,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
     // Input processing
     if (!state.catharsisRunning) {
-      const speed = isMobile ? MOVE_SPEED * 1.3 : MOVE_SPEED * 1.2
+      const speed = MOVE_SPEED * dt
       if (state.movingRight && !state.hitWall) state.cameraX += speed
       if (state.movingLeft && state.cameraX > 0) state.cameraX -= speed
       state.cameraX = Math.max(0, Math.min(state.cameraX, WORLD_WIDTH - width))
