@@ -9,7 +9,7 @@ interface TerminalEasterEggProps {
 export function TerminalEasterEgg({ onCommand }: TerminalEasterEggProps) {
   const [isActive, setIsActive] = useState(false);
   const [input, setInput] = useState('');
-  const [history, setHistory] = useState<{ command: string; output: string }[]>([]);
+  const [, setHistory] = useState<{ command: string; output: string }[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Default command handler

@@ -55,7 +55,7 @@ export default function Home() {
                     <span className="text-foreground/70">&gt;</span> cat blog.md
                   </p>
                   <p className="text-foreground leading-relaxed">
-                    I write about design, AI, and whatever's on my mind at{" "}
+                    I write about design, AI, and whatever&apos;s on my mind at{" "}
                     <Link
                       href="https://scoobynko.substack.com/"
                       target="_blank"

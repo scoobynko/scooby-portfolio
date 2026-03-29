@@ -1,8 +1,35 @@
 const ACCENT = '#27c93f'
-const BG = '#0a0a0a'
-const TEXT_COLOR = '#ffffff'
-const MUTED_COLOR = '#888'
 const FONT_SIZE = '14px'
+
+// Resolve a CSS variable to an rgb() string safe for canvas fillStyle
+function cssVarToRgb(varName: string): string {
+  const el = document.createElement('div')
+  el.style.color = `var(${varName})`
+  document.body.appendChild(el)
+  const rgb = getComputedStyle(el).color
+  el.remove()
+  return rgb
+}
+
+interface ThemeColors {
+  bg: string
+  text: string
+  muted: string
+  border: string
+  mutedBg: string
+  accent: string
+}
+
+function resolveThemeColors(): ThemeColors {
+  return {
+    bg: cssVarToRgb('--background'),
+    text: cssVarToRgb('--foreground'),
+    muted: cssVarToRgb('--muted-foreground'),
+    border: cssVarToRgb('--border'),
+    mutedBg: cssVarToRgb('--muted'),
+    accent: ACCENT,
+  }
+}
 const CHAR_DELAY = 30
 const FACE_CHAR_DELAY = 40
 
@@ -116,7 +143,14 @@ interface GameState {
   ctaReady: boolean
 }
 
-export function createTerminalExperience(container: HTMLElement): () => void {
+export function createTerminalExperience(
+  container: HTMLElement,
+  setTheme: (theme: string) => void,
+  getTheme: () => string | undefined,
+): () => void {
+  // --- Theme colors ---
+  let colors = resolveThemeColors()
+
   // --- Cleanup infrastructure ---
   const timeoutIds = new Set<number>()
   const intervalIds = new Set<number>()
@@ -172,8 +206,8 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     height: '100dvh',
     fontFamily: "'JetBrains Mono', monospace",
     fontSize: FONT_SIZE,
-    color: TEXT_COLOR,
-    background: BG,
+    color: colors.text,
+    background: colors.bg,
   })
 
   const terminalWindow = document.createElement('div')
@@ -183,25 +217,72 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    border: isMobile ? 'none' : '1px solid #444',
+    border: isMobile ? 'none' : `1px solid ${colors.border}`,
   })
 
   const titleBar = document.createElement('div')
   Object.assign(titleBar.style, {
     padding: '6px 12px',
-    borderBottom: '1px solid #444',
+    borderBottom: `1px solid ${colors.border}`,
     userSelect: 'none',
     flexShrink: '0',
     display: 'flex',
     justifyContent: 'space-between',
+    alignItems: 'center',
   })
   const titleLeft = document.createElement('span')
   titleLeft.textContent = 'user@scooby:~'
-  titleLeft.style.color = MUTED_COLOR
+  titleLeft.style.color = colors.muted
+
+  // Theme toggle
+  const toggleContainer = document.createElement('div')
+  Object.assign(toggleContainer.style, {
+    display: 'flex',
+    gap: '2px',
+    padding: '2px',
+  })
+
+  const toggleOptions = [
+    { value: 'light', label: '[ ]' },
+    { value: 'dark', label: '[■]' },
+    { value: 'system', label: '[~]' },
+  ]
+
+  const toggleButtons: HTMLElement[] = []
+  for (const option of toggleOptions) {
+    const btn = document.createElement('button')
+    btn.textContent = option.label
+    btn.dataset.themeValue = option.value
+    Object.assign(btn.style, {
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: '12px',
+      padding: '2px 6px',
+      transition: 'all 0.15s',
+    })
+    btn.addEventListener('click', () => setTheme(option.value))
+    toggleButtons.push(btn)
+    toggleContainer.appendChild(btn)
+  }
+
+  function updateToggleButtons(): void {
+    const currentTheme = getTheme()
+    for (const btn of toggleButtons) {
+      const isActive = btn.dataset.themeValue === currentTheme
+      btn.style.color = isActive ? colors.bg : colors.muted
+      btn.style.background = isActive ? colors.text : 'transparent'
+    }
+  }
+  updateToggleButtons()
+
   const titleRight = document.createElement('span')
   titleRight.textContent = 'bash'
-  titleRight.style.color = MUTED_COLOR
+  titleRight.style.color = colors.muted
+
   titleBar.appendChild(titleLeft)
+  titleBar.appendChild(toggleContainer)
   titleBar.appendChild(titleRight)
 
   // Split container: game left, text right
@@ -226,7 +307,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
   Object.assign(divider.style, {
     width: isMobile ? '100%' : '1px',
     height: isMobile ? '1px' : '100%',
-    background: '#444',
+    background: colors.border,
     flexShrink: '0',
   })
 
@@ -246,7 +327,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     position: 'absolute',
     top: '12px',
     left: '16px',
-    color: MUTED_COLOR,
+    color: colors.muted,
     zIndex: '2',
     opacity: '0',
   })
@@ -295,9 +376,9 @@ export function createTerminalExperience(container: HTMLElement): () => void {
       alignItems: 'center',
       justifyContent: 'center',
       height: '52px',
-      borderTop: '1px solid #444',
-      background: '#111',
-      color: TEXT_COLOR,
+      borderTop: `1px solid ${colors.border}`,
+      background: colors.mutedBg,
+      color: colors.text,
       fontFamily: "'JetBrains Mono', monospace",
       fontSize: '22px',
       userSelect: 'none',
@@ -312,6 +393,54 @@ export function createTerminalExperience(container: HTMLElement): () => void {
   if (isMobile && mobileMoveButton) terminalWindow.appendChild(mobileMoveButton)
   wrapper.appendChild(terminalWindow)
   container.appendChild(wrapper)
+
+  // --- Theme change detection ---
+  let splashEls: {
+    splash: HTMLElement
+    shadows: HTMLElement[]
+    glows: HTMLElement[]
+    mains: HTMLElement[]
+    prompt: HTMLElement
+  } | null = null
+
+  function applyThemeToDOM(): void {
+    wrapper.style.background = colors.bg
+    wrapper.style.color = colors.text
+    terminalWindow.style.borderColor = colors.border
+    titleBar.style.borderBottomColor = colors.border
+    titleLeft.style.color = colors.muted
+    titleRight.style.color = colors.muted
+    divider.style.background = colors.border
+    figCounter.style.color = colors.muted
+    if (mobileMoveButton) {
+      mobileMoveButton.style.borderTopColor = colors.border
+      mobileMoveButton.style.background = colors.mutedBg
+      mobileMoveButton.style.color = colors.text
+    }
+    if (isMobile && textZone) {
+      textZone.style.background = `linear-gradient(transparent, ${colors.bg} 15%)`
+    }
+    if (idleCursor) {
+      idleCursor.style.color = colors.muted
+    }
+    if (splashEls) {
+      splashEls.splash.style.background = colors.bg
+      for (const el of splashEls.shadows) el.style.color = colors.border
+      for (const el of splashEls.glows) el.style.color = colors.accent
+      for (const el of splashEls.mains) el.style.color = colors.text
+      splashEls.prompt.style.color = colors.muted
+    }
+    updateToggleButtons()
+  }
+
+  const themeObserver = new MutationObserver(() => {
+    colors = resolveThemeColors()
+    applyThemeToDOM()
+  })
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class'],
+  })
 
   // --- Utility functions ---
 
@@ -421,7 +550,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
       // Flicker effect
       const flicker = bolt.life % 4 === 0 ? 0.5 : 1.0
       ctx.globalAlpha = alpha * flicker
-      ctx.fillStyle = '#ffffff'
+      ctx.fillStyle = colors.text
       for (const seg of bolt.segments) {
         ctx.fillText(seg.char, seg.x, seg.y)
       }
@@ -442,7 +571,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
   // --- Fireworks ---
 
   const FIREWORK_CHARS = ['*', '·', '+', '✦', '°', '•', '★']
-  const FIREWORK_COLORS = [ACCENT, '#ffffff', '#ffdd44', '#ff6644', '#44ddff']
+  const FIREWORK_COLORS = [colors.accent, '#ffffff', '#ffdd44', '#ff6644', '#44ddff']
 
   function spawnFirework(canvasWidth: number, groundY: number): Firework {
     const x = 40 + Math.random() * (canvasWidth - 80)
@@ -526,10 +655,10 @@ export function createTerminalExperience(container: HTMLElement): () => void {
   function setFigCount(count: number, shipped?: boolean): void {
     if (shipped) {
       figCounter.textContent = `[.fig \u00d7 ${count}] \u2713 shipped`
-      figCounter.style.color = ACCENT
+      figCounter.style.color = colors.accent
     } else {
       figCounter.textContent = `[.fig \u00d7 ${count}]`
-      figCounter.style.color = MUTED_COLOR
+      figCounter.style.color = colors.muted
     }
   }
 
@@ -752,7 +881,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     canvasWidth: number,
   ): void {
     // 1. Horizontal ground line
-    ctx.strokeStyle = MUTED_COLOR
+    ctx.strokeStyle = colors.muted
     ctx.globalAlpha = 0.4
     ctx.lineWidth = 1
     ctx.beginPath()
@@ -767,7 +896,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     const startOffset = -(cameraX % textureWidth)
 
     ctx.font = '14px monospace'
-    ctx.fillStyle = MUTED_COLOR
+    ctx.fillStyle = colors.muted
 
     let x = startOffset
     while (x < canvasWidth + textureWidth) {
@@ -817,7 +946,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
         const ch = chars[Math.floor(r2 * chars.length)]
 
         ctx.globalAlpha = 0.15 + twinkle * 0.25
-        ctx.fillStyle = '#ffffff'
+        ctx.fillStyle = colors.text
         ctx.fillText(ch, screenX, screenY)
       }
     }
@@ -891,7 +1020,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
         }
 
         ctx.globalAlpha = Math.min(alpha, 0.3)
-        ctx.fillStyle = MUTED_COLOR
+        ctx.fillStyle = colors.muted
         ctx.fillText(ch, screenX, screenY)
       }
     }
@@ -939,13 +1068,13 @@ export function createTerminalExperience(container: HTMLElement): () => void {
       // File icon
       ctx.font = '14px monospace'
       ctx.globalAlpha = 0.6
-      ctx.fillStyle = TEXT_COLOR
+      ctx.fillStyle = colors.text
       ctx.fillText('[.fig]', screenX, groundY - 16)
 
       // Label above
       ctx.font = '10px monospace'
       ctx.globalAlpha = 1.0
-      ctx.fillStyle = MUTED_COLOR
+      ctx.fillStyle = colors.muted
       ctx.fillText(file.label, screenX, groundY - 32)
     }
 
@@ -971,7 +1100,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
     // Three columns of '|' characters
     ctx.font = '14px monospace'
-    ctx.fillStyle = TEXT_COLOR
+    ctx.fillStyle = colors.text
     ctx.globalAlpha = 0.3
 
     const offsets = [0, 10, 20]
@@ -985,7 +1114,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
     // "PUSH TO" and "PRODUCTION" labels
     ctx.font = 'bold 14px monospace'
-    ctx.fillStyle = ACCENT
+    ctx.fillStyle = colors.accent
     ctx.textAlign = 'center'
 
     const centerX = screenX + 10 // center of the 3 columns (0, 10, 20)
@@ -1043,7 +1172,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
 
   function renderShatterParticles(ctx: CanvasRenderingContext2D, particles: ShatterParticle[]): void {
     ctx.font = '14px monospace'
-    ctx.fillStyle = TEXT_COLOR
+    ctx.fillStyle = colors.text
 
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i]
@@ -1066,7 +1195,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
   ): void {
     // Draw face
     ctx.font = 'bold 16px monospace'
-    ctx.fillStyle = TEXT_COLOR
+    ctx.fillStyle = colors.text
     const faceWidth = ctx.measureText(face).width
     ctx.fillText(face, screenX - faceWidth / 2, groundY - 24 + hopOffset + bounceOffset)
 
@@ -1190,7 +1319,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     for (const child of children) {
       const clone = child.cloneNode(true) as HTMLElement
       if (clone.style) {
-        clone.style.color = MUTED_COLOR
+        clone.style.color = colors.muted
         clone.style.fontWeight = 'normal'
       }
       fragment.appendChild(clone)
@@ -1294,7 +1423,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
           isMobile ? '> Wanna talk about it? [tap]' : '> Wanna talk about it? [\u21B5]',
         ], CHAR_DELAY, 400, undefined, () => {
           state.ctaReady = true
-        }, ACCENT)
+        }, colors.accent)
       }
     }, 6200)
   }
@@ -1442,7 +1571,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     Object.assign(textHistory.style, { marginTop: '12px' })
 
     idleCursor = document.createElement('div')
-    Object.assign(idleCursor.style, { color: MUTED_COLOR, display: 'none' })
+    Object.assign(idleCursor.style, { color: colors.muted, display: 'none' })
 
     if (isMobile) {
       Object.assign(textZone.style, {
@@ -1456,7 +1585,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
         scrollbarWidth: 'none',
         lineHeight: '1.7',
         zIndex: '2',
-        background: 'linear-gradient(transparent, rgba(10,10,10,0.95) 15%)',
+        background: `linear-gradient(transparent, ${colors.bg} 15%)`,
       })
       textZone.appendChild(idleCursor)
       textZone.appendChild(textCurrent)
@@ -1555,7 +1684,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: BG,
+      background: colors.bg,
       transition: 'opacity 0.4s',
     })
 
@@ -1584,15 +1713,15 @@ export function createTerminalExperience(container: HTMLElement): () => void {
       Object.assign(wrap.style, { position: 'relative', display: 'inline-block' })
 
       const shadow = document.createElement('pre')
-      Object.assign(shadow.style, { ...fontStyle, color: '#444', position: 'absolute', top: '6px', left: '6px' })
+      Object.assign(shadow.style, { ...fontStyle, color: colors.border, position: 'absolute', top: '6px', left: '6px' })
       shadow.textContent = text
 
       const glow = document.createElement('pre')
-      Object.assign(glow.style, { ...fontStyle, color: ACCENT, position: 'absolute', top: '3px', left: '3px', opacity: '1' })
+      Object.assign(glow.style, { ...fontStyle, color: colors.accent, position: 'absolute', top: '3px', left: '3px', opacity: '1' })
       glow.textContent = text
 
       const main = document.createElement('pre')
-      Object.assign(main.style, { ...fontStyle, color: TEXT_COLOR, position: 'relative' })
+      Object.assign(main.style, { ...fontStyle, color: colors.text, position: 'relative' })
       main.textContent = text
 
       wrap.appendChild(shadow)
@@ -1630,20 +1759,20 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     Object.assign(figmaWrap.style, { position: 'relative', display: 'inline-block' })
 
     const figmaShadow = document.createElement('pre')
-    Object.assign(figmaShadow.style, { ...fontStyle, color: '#444', position: 'absolute', top: '6px', left: '6px' })
+    Object.assign(figmaShadow.style, { ...fontStyle, color: colors.border, position: 'absolute', top: '6px', left: '6px' })
     figmaShadow.textContent = figmaText
 
     const figmaGlow = document.createElement('pre')
-    Object.assign(figmaGlow.style, { ...fontStyle, color: ACCENT, position: 'absolute', top: '3px', left: '3px', opacity: '1' })
+    Object.assign(figmaGlow.style, { ...fontStyle, color: colors.accent, position: 'absolute', top: '3px', left: '3px', opacity: '1' })
     figmaGlow.textContent = figmaText
 
     const figmaMain = document.createElement('pre')
-    Object.assign(figmaMain.style, { ...fontStyle, color: TEXT_COLOR, position: 'relative' })
+    Object.assign(figmaMain.style, { ...fontStyle, color: colors.text, position: 'relative' })
     figmaMain.textContent = figmaText
 
     // Green offset ghost — static shift
     const figmaGhost = document.createElement('pre')
-    Object.assign(figmaGhost.style, { ...fontStyle, color: ACCENT, position: 'absolute', top: '-1px', left: '3px', opacity: '1' })
+    Object.assign(figmaGhost.style, { ...fontStyle, color: colors.accent, position: 'absolute', top: '-1px', left: '3px', opacity: '1' })
     figmaGhost.textContent = figmaText
 
     figmaWrap.appendChild(figmaShadow)
@@ -1661,7 +1790,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     const prompt = document.createElement('div')
     Object.assign(prompt.style, {
       marginTop: '32px',
-      color: MUTED_COLOR,
+      color: colors.muted,
       fontFamily: "'JetBrains Mono', monospace",
       fontSize: isMobile ? '11px' : FONT_SIZE,
       userSelect: 'none',
@@ -1680,6 +1809,15 @@ export function createTerminalExperience(container: HTMLElement): () => void {
     splitContainer.style.position = 'relative'
     splitContainer.appendChild(splash)
 
+    // Register splash elements for theme updates
+    splashEls = {
+      splash,
+      shadows: [yourBlock.wrap.children[0] as HTMLElement, sucksBlock.wrap.children[0] as HTMLElement, figmaShadow],
+      glows: [yourBlock.wrap.children[1] as HTMLElement, sucksBlock.wrap.children[1] as HTMLElement, figmaGlow, figmaGhost],
+      mains: [yourBlock.wrap.children[2] as HTMLElement, sucksBlock.wrap.children[2] as HTMLElement, figmaMain],
+      prompt,
+    }
+
     let started = false
     function startFromSplash(): void {
       if (started) return
@@ -1690,6 +1828,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
       splash.style.opacity = '0'
       safeTimeout(() => {
         splash.remove()
+        splashEls = null
         runBootSequence()
       }, 400)
     }
@@ -1708,6 +1847,7 @@ export function createTerminalExperience(container: HTMLElement): () => void {
   // --- Cleanup ---
   return function cleanup(): void {
     state.gameRunning = false
+    themeObserver.disconnect()
     timeoutIds.forEach((id) => clearTimeout(id))
     timeoutIds.clear()
     intervalIds.forEach((id) => clearInterval(id))
