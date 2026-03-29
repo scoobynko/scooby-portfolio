@@ -7,22 +7,18 @@ import { createTerminalExperience } from './terminal-experience'
 export default function YourFigmaSucksPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const { theme, setTheme } = useTheme()
-  const previousThemeRef = useRef<string | undefined>(undefined)
+  const themeRef = useRef(theme)
+
+  useEffect(() => { themeRef.current = theme }, [theme])
 
   useEffect(() => {
-    previousThemeRef.current = theme
-    setTheme('dark')
-
-    return () => {
-      if (previousThemeRef.current) {
-        setTheme(previousThemeRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    const cleanup = createTerminalExperience(containerRef.current!)
+    const cleanup = createTerminalExperience(
+      containerRef.current!,
+      setTheme,
+      () => themeRef.current,
+    )
     return cleanup
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
@@ -32,7 +28,7 @@ export default function YourFigmaSucksPage() {
         position: 'fixed',
         inset: 0,
         zIndex: 50,
-        background: '#0a0a0a',
+        background: 'var(--background)',
         overflow: 'hidden',
       }}
     />
